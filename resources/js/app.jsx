@@ -506,6 +506,434 @@ function ChartsPage() {
         </div>
     );
 }
+
+// ═══════════════════════════════════════
+// ALL DATA / DATA ENTRY PAGE
+// ═══════════════════════════════════════
+function AllDataPage() {
+    const [tab, setTab]             = useState('institution');
+    const [districts, setDistricts] = useState([]);
+    const [upazilas,  setUpazilas]  = useState([]);
+    const [unions,    setUnions]    = useState([]);
+    const [instList,  setInstList]  = useState([]);
+    const [wpList,    setWpList]    = useState([]);
+    const [msg,       setMsg]       = useState({ type: '', text: '' });
+    const [loading,   setLoading]   = useState(false);
+
+    const [instForm, setInstForm] = useState({
+        district_id: '', upazila_id: '', union_id: '', name: '',
+        type: 'primary_school', status: 'active',
+        has_infrastructure: true, needs_repair: false,
+    });
+    const [wpForm, setWpForm] = useState({
+        institution_id: '', type: 'deep_tubewell',
+        status: 'functional', quarter: '1', year: new Date().getFullYear(),
+    });
+    const [stuForm, setStuForm] = useState({
+        institution_id: '', girls_count: '', boys_count: '',
+        year: new Date().getFullYear(),
+    });
+    const [chemForm, setChemForm] = useState({
+        water_point_id: '', arsenic: '', iron: '',
+        manganese: '', salinity: '', ph: '',
+        test_date: new Date().toISOString().split('T')[0],
+    });
+
+    useEffect(() => {
+        getDistricts().then(r => setDistricts(r.data));
+        api.get('/institutions-list').then(r => setInstList(r.data));
+        api.get('/water-points-list').then(r => setWpList(r.data));
+    }, []);
+
+    const reloadLists = () => {
+        api.get('/institutions-list').then(r => setInstList(r.data));
+        api.get('/water-points-list').then(r => setWpList(r.data));
+    };
+
+    const showMsg = (type, text) => {
+        setMsg({ type, text });
+        setTimeout(() => setMsg({ type: '', text: '' }), 5000);
+    };
+
+    const onInstDistrict = e => {
+        const v = e.target.value;
+        setInstForm(f => ({ ...f, district_id: v, upazila_id: '', union_id: '' }));
+        setUpazilas([]); setUnions([]);
+        if (v) getUpazilas(v).then(r => setUpazilas(r.data));
+    };
+    const onInstUpazila = e => {
+        const v = e.target.value;
+        setInstForm(f => ({ ...f, upazila_id: v, union_id: '' }));
+        setUnions([]);
+        if (v) getUnions(v).then(r => setUnions(r.data));
+    };
+
+    const submitInstitution = async () => {
+        if (!instForm.district_id || !instForm.upazila_id || !instForm.name)
+            return showMsg('error', 'District, Upazila and Name are required.');
+        setLoading(true);
+        try {
+            await api.post('/institutions', {
+                ...instForm,
+                has_infrastructure: instForm.has_infrastructure ? 1 : 0,
+                needs_repair:       instForm.needs_repair       ? 1 : 0,
+            });
+            showMsg('success', `Institution "${instForm.name}" saved! Charts will update.`);
+            setInstForm({ district_id: '', upazila_id: '', union_id: '', name: '',
+                type: 'primary_school', status: 'active',
+                has_infrastructure: true, needs_repair: false });
+            reloadLists();
+        } catch (e) {
+            showMsg('error', e.response?.data?.message || 'Error saving institution.');
+        }
+        setLoading(false);
+    };
+
+    const submitWaterPoint = async () => {
+        if (!wpForm.institution_id)
+            return showMsg('error', 'Please select an institution.');
+        setLoading(true);
+        try {
+            await api.post('/water-points', wpForm);
+            showMsg('success', 'Water point saved! Dashboard charts will update.');
+            setWpForm({ institution_id: '', type: 'deep_tubewell',
+                status: 'functional', quarter: '1', year: new Date().getFullYear() });
+            reloadLists();
+        } catch (e) {
+            showMsg('error', e.response?.data?.message || 'Error saving water point.');
+        }
+        setLoading(false);
+    };
+
+    const submitStudents = async () => {
+        if (!stuForm.institution_id || !stuForm.girls_count || !stuForm.boys_count)
+            return showMsg('error', 'All fields are required.');
+        setLoading(true);
+        try {
+            await api.post('/students', stuForm);
+            showMsg('success', 'Student data saved! Student counts will update.');
+            setStuForm({ institution_id: '', girls_count: '', boys_count: '',
+                year: new Date().getFullYear() });
+        } catch (e) {
+            showMsg('error', e.response?.data?.message || 'Error saving students.');
+        }
+        setLoading(false);
+    };
+
+    const submitChemical = async () => {
+        if (!chemForm.water_point_id || !chemForm.test_date)
+            return showMsg('error', 'Water point and test date are required.');
+        setLoading(true);
+        try {
+            await api.post('/chemical-tests-add', chemForm);
+            showMsg('success', 'Chemical test saved! WHO standards auto-calculated.');
+            setChemForm({ water_point_id: '', arsenic: '', iron: '',
+                manganese: '', salinity: '', ph: '',
+                test_date: new Date().toISOString().split('T')[0] });
+        } catch (e) {
+            showMsg('error', e.response?.data?.message || 'Error saving chemical test.');
+        }
+        setLoading(false);
+    };
+
+    const TABS = [
+        { key: 'institution', label: '🏛️ Institution' },
+        { key: 'waterpoint',  label: '💧 Water Point' },
+        { key: 'students',    label: '🎓 Students'    },
+        { key: 'chemical',    label: '🧪 Chemical Test'},
+    ];
+
+    const inp = {
+        border: '1px solid #d1d5db', borderRadius: 6,
+        padding: '9px 12px', fontSize: 14, width: '100%',
+        boxSizing: 'border-box', background: 'white',
+    };
+    const lbl   = { fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6, display: 'block' };
+    const fld   = { marginBottom: 16 };
+    const g2    = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 };
+    const g3    = { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 };
+    const btn   = {
+        background: loading ? '#9ca3af' : '#e9837a',
+        color: 'white', border: 'none', borderRadius: 6,
+        padding: '11px 28px', fontSize: 14, fontWeight: 600,
+        cursor: loading ? 'not-allowed' : 'pointer', marginTop: 8,
+    };
+
+    return (
+        <div style={{ padding: 24 }}>
+            <h2 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 700 }}>Data Entry</h2>
+            <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 20 }}>
+                Add records below — data saves to PostgreSQL and affects all charts instantly.
+            </p>
+
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '2px solid #e5e7eb' }}>
+                {TABS.map(t => (
+                    <button key={t.key} onClick={() => setTab(t.key)} style={{
+                        padding: '10px 20px', border: 'none', cursor: 'pointer',
+                        fontSize: 14, fontWeight: 600, borderRadius: '6px 6px 0 0',
+                        background: tab === t.key ? '#e9837a' : '#f3f4f6',
+                        color:      tab === t.key ? 'white'   : '#6b7280',
+                        marginBottom: tab === t.key ? -2 : 0,
+                        borderBottom: tab === t.key ? '2px solid #e9837a' : 'none',
+                    }}>{t.label}</button>
+                ))}
+            </div>
+
+            {/* Message banner */}
+            {msg.text && (
+                <div style={{
+                    padding: '12px 16px', borderRadius: 8, marginBottom: 20,
+                    fontSize: 14, fontWeight: 500,
+                    background: msg.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                    color:      msg.type === 'success' ? '#15803d' : '#b91c1c',
+                    border: `1px solid ${msg.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
+                }}>
+                    {msg.type === 'success' ? '✅' : '❌'} {msg.text}
+                </div>
+            )}
+
+            {/* ── TAB 1: INSTITUTION ── */}
+            {tab === 'institution' && (
+                <div style={{ ...card, maxWidth: 820 }}>
+                    <h3 style={{ margin: '0 0 20px', fontSize: 17, color: '#1f2937' }}>Add New Institution</h3>
+                    <div style={g3}>
+                        <div style={fld}>
+                            <label style={lbl}>District *</label>
+                            <select style={inp} value={instForm.district_id} onChange={onInstDistrict}>
+                                <option value="">Select District</option>
+                                {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Upazila *</label>
+                            <select style={inp} value={instForm.upazila_id} onChange={onInstUpazila}>
+                                <option value="">Select Upazila</option>
+                                {upazilas.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                            </select>
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Union</label>
+                            <select style={inp} value={instForm.union_id}
+                                onChange={e => setInstForm(f => ({ ...f, union_id: e.target.value }))}>
+                                <option value="">Select Union</option>
+                                {unions.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div style={fld}>
+                        <label style={lbl}>Institution Name *</label>
+                        <input style={inp} placeholder="e.g. Dumuria Primary School No. 5"
+                            value={instForm.name}
+                            onChange={e => setInstForm(f => ({ ...f, name: e.target.value }))} />
+                    </div>
+                    <div style={g2}>
+                        <div style={fld}>
+                            <label style={lbl}>Institution Type *</label>
+                            <select style={inp} value={instForm.type}
+                                onChange={e => setInstForm(f => ({ ...f, type: e.target.value }))}>
+                                <option value="primary_school">Primary School</option>
+                                <option value="secondary_school">Secondary School</option>
+                                <option value="madrasa">Madrasa</option>
+                                <option value="community_clinic">Community Clinic</option>
+                                <option value="health_family_planning">Health & Family Planning</option>
+                                <option value="community">Community</option>
+                            </select>
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Status *</label>
+                            <select style={inp} value={instForm.status}
+                                onChange={e => setInstForm(f => ({ ...f, status: e.target.value }))}>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="under_construction">Under Construction</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 28, marginBottom: 20 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+                            <input type="checkbox" checked={instForm.has_infrastructure}
+                                onChange={e => setInstForm(f => ({ ...f, has_infrastructure: e.target.checked }))}
+                                style={{ width: 16, height: 16 }} />
+                            Has Infrastructure
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+                            <input type="checkbox" checked={instForm.needs_repair}
+                                onChange={e => setInstForm(f => ({ ...f, needs_repair: e.target.checked }))}
+                                style={{ width: 16, height: 16 }} />
+                            Needs Repair / Renovation
+                        </label>
+                    </div>
+                    <button style={btn} onClick={submitInstitution} disabled={loading}>
+                        {loading ? 'Saving...' : '💾 Save Institution'}
+                    </button>
+                </div>
+            )}
+
+            {/* ── TAB 2: WATER POINT ── */}
+            {tab === 'waterpoint' && (
+                <div style={{ ...card, maxWidth: 700 }}>
+                    <h3 style={{ margin: '0 0 20px', fontSize: 17, color: '#1f2937' }}>Add New Water Point</h3>
+                    <div style={fld}>
+                        <label style={lbl}>Institution *</label>
+                        <select style={inp} value={wpForm.institution_id}
+                            onChange={e => setWpForm(f => ({ ...f, institution_id: e.target.value }))}>
+                            <option value="">Select Institution</option>
+                            {instList.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                    </div>
+                    <div style={g2}>
+                        <div style={fld}>
+                            <label style={lbl}>Water Point Type *</label>
+                            <select style={inp} value={wpForm.type}
+                                onChange={e => setWpForm(f => ({ ...f, type: e.target.value }))}>
+                                <option value="deep_tubewell">Deep Tubewell</option>
+                                <option value="shallow_tubewell">Shallow Tubewell</option>
+                                <option value="piped_water">Piped Water</option>
+                                <option value="rainwater_harvesting">Rainwater Harvesting</option>
+                                <option value="reverse_osmosis">Reverse Osmosis</option>
+                            </select>
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Status *</label>
+                            <select style={inp} value={wpForm.status}
+                                onChange={e => setWpForm(f => ({ ...f, status: e.target.value }))}>
+                                <option value="functional">Functional</option>
+                                <option value="non_functional">Non Functional</option>
+                                <option value="no_drinking_source">No Drinking Source</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style={g2}>
+                        <div style={fld}>
+                            <label style={lbl}>Quarter *</label>
+                            <select style={inp} value={wpForm.quarter}
+                                onChange={e => setWpForm(f => ({ ...f, quarter: e.target.value }))}>
+                                <option value="1">Q1 — Jan to Mar</option>
+                                <option value="2">Q2 — Apr to Jun</option>
+                                <option value="3">Q3 — Jul to Sep</option>
+                                <option value="4">Q4 — Oct to Dec</option>
+                            </select>
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Year *</label>
+                            <input style={inp} type="number" min="2020" max="2030"
+                                value={wpForm.year}
+                                onChange={e => setWpForm(f => ({ ...f, year: e.target.value }))} />
+                        </div>
+                    </div>
+                    <button style={btn} onClick={submitWaterPoint} disabled={loading}>
+                        {loading ? 'Saving...' : '💾 Save Water Point'}
+                    </button>
+                </div>
+            )}
+
+            {/* ── TAB 3: STUDENTS ── */}
+            {tab === 'students' && (
+                <div style={{ ...card, maxWidth: 620 }}>
+                    <h3 style={{ margin: '0 0 20px', fontSize: 17, color: '#1f2937' }}>Add Student Count</h3>
+                    <div style={fld}>
+                        <label style={lbl}>Institution *</label>
+                        <select style={inp} value={stuForm.institution_id}
+                            onChange={e => setStuForm(f => ({ ...f, institution_id: e.target.value }))}>
+                            <option value="">Select Institution</option>
+                            {instList.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                        </select>
+                    </div>
+                    <div style={g3}>
+                        <div style={fld}>
+                            <label style={lbl}>Girls Count *</label>
+                            <input style={inp} type="number" min="0" placeholder="0"
+                                value={stuForm.girls_count}
+                                onChange={e => setStuForm(f => ({ ...f, girls_count: e.target.value }))} />
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Boys Count *</label>
+                            <input style={inp} type="number" min="0" placeholder="0"
+                                value={stuForm.boys_count}
+                                onChange={e => setStuForm(f => ({ ...f, boys_count: e.target.value }))} />
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Year *</label>
+                            <input style={inp} type="number" min="2020" max="2030"
+                                value={stuForm.year}
+                                onChange={e => setStuForm(f => ({ ...f, year: e.target.value }))} />
+                        </div>
+                    </div>
+                    {stuForm.girls_count && stuForm.boys_count && (
+                        <div style={{ background: '#eff6ff', borderRadius: 6, padding: '10px 14px', marginBottom: 16, fontSize: 14, color: '#1e40af' }}>
+                            📊 Total: <strong>{(parseInt(stuForm.girls_count || 0) + parseInt(stuForm.boys_count || 0)).toLocaleString()}</strong> students
+                        </div>
+                    )}
+                    <button style={btn} onClick={submitStudents} disabled={loading}>
+                        {loading ? 'Saving...' : '💾 Save Student Data'}
+                    </button>
+                </div>
+            )}
+
+            {/* ── TAB 4: CHEMICAL TEST ── */}
+            {tab === 'chemical' && (
+                <div style={{ ...card, maxWidth: 760 }}>
+                    <h3 style={{ margin: '0 0 4px', fontSize: 17, color: '#1f2937' }}>Add Chemical Test Result</h3>
+                    <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 20 }}>
+                        WHO limits: Arsenic ≤0.05 | Iron ≤0.3 | Manganese ≤0.1 | Salinity ≤0.6 | pH 6.5–8.5 (mg/L) — auto-calculated on save.
+                    </p>
+                    <div style={g2}>
+                        <div style={fld}>
+                            <label style={lbl}>Water Point *</label>
+                            <select style={inp} value={chemForm.water_point_id}
+                                onChange={e => setChemForm(f => ({ ...f, water_point_id: e.target.value }))}>
+                                <option value="">Select Water Point</option>
+                                {wpList.map(w => (
+                                    <option key={w.id} value={w.id}>
+                                        WP #{w.id} — {w.type?.replace(/_/g, ' ')} ({w.status})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div style={fld}>
+                            <label style={lbl}>Test Date *</label>
+                            <input style={inp} type="date" value={chemForm.test_date}
+                                onChange={e => setChemForm(f => ({ ...f, test_date: e.target.value }))} />
+                        </div>
+                    </div>
+                    <div style={g3}>
+                        {[
+                            { key: 'arsenic',   label: 'Arsenic (mg/L)',   limit: 0.05 },
+                            { key: 'iron',      label: 'Iron (mg/L)',      limit: 0.3  },
+                            { key: 'manganese', label: 'Manganese (mg/L)', limit: 0.1  },
+                            { key: 'salinity',  label: 'Salinity (mg/L)',  limit: 0.6  },
+                            { key: 'ph',        label: 'pH Level',         limit: null },
+                        ].map(p => {
+                            const val      = parseFloat(chemForm[p.key]);
+                            const exceeded = p.limit && !isNaN(val) && val > p.limit;
+                            const ok       = p.limit && !isNaN(val) && val > 0 && !exceeded;
+                            return (
+                                <div key={p.key} style={fld}>
+                                    <label style={{ ...lbl, color: exceeded ? '#b91c1c' : '#374151' }}>
+                                        {p.label} {p.limit ? `(≤${p.limit})` : '(6.5–8.5)'}
+                                    </label>
+                                    <input
+                                        style={{ ...inp, borderColor: exceeded ? '#f87171' : '#d1d5db', background: exceeded ? '#fff5f5' : 'white' }}
+                                        type="number" step="0.001" min="0" placeholder="0.000"
+                                        value={chemForm[p.key]}
+                                        onChange={e => setChemForm(f => ({ ...f, [p.key]: e.target.value }))}
+                                    />
+                                    {exceeded && <span style={{ color: '#b91c1c', fontSize: 11 }}>⚠️ Exceeds WHO limit</span>}
+                                    {ok       && <span style={{ color: '#15803d', fontSize: 11 }}>✅ Within standard</span>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <button style={btn} onClick={submitChemical} disabled={loading}>
+                        {loading ? 'Saving...' : '💾 Save Chemical Test'}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ═══════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════
@@ -585,11 +1013,12 @@ function App() {
                     </span>
                 </div>
 
-                {/* Page */}
+               {/* Page */}
                 <div style={{ flex: 1 }}>
                     {activePage === 'Dashboard'         && <DashboardPage />}
+                    {activePage === 'All Data'          && <AllDataPage />}
                     {activePage === 'Charts & Analysis' && <ChartsPage />}
-                    {!['Dashboard', 'Charts & Analysis'].includes(activePage) && (
+                    {!['Dashboard', 'All Data', 'Charts & Analysis'].includes(activePage) && (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 400, color: '#aaa' }}>
                             <div style={{ fontSize: 56, marginBottom: 16 }}>🚧</div>
                             <div style={{ fontSize: 20, fontWeight: 600 }}>{activePage}</div>
