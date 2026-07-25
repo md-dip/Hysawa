@@ -279,111 +279,205 @@ function ChartsPage() {
     const [chemical,  setChemical]  = useState([]);
     const [quarterly, setQuarterly] = useState([]);
     const [upazilas,  setUpazilas]  = useState([]);
+    const [instTypes, setInstTypes] = useState({ total: 0, breakdown: [] });
+    const [wpTypes2,  setWpTypes2]  = useState({ total: 0, breakdown: [] });
 
     useEffect(() => {
         getDashboardSummary().then(r => setSummary(r.data));
-        getChemicalTests().then(r => setChemical(r.data));
-        getQuarterlyGrowth().then(r => setQuarterly(r.data));
-        getUpazilaWise().then(r => setUpazilas(r.data));
+        getChemicalTests().then(r    => setChemical(r.data));
+        getQuarterlyGrowth().then(r  => setQuarterly(r.data));
+        getUpazilaWise().then(r      => setUpazilas(r.data));
+        api.get('/charts/institution-types').then(r => setInstTypes(r.data));
+        api.get('/charts/waterpoint-types').then(r  => setWpTypes2(r.data));
     }, []);
 
     if (!summary) return <div style={{ padding: 40, color: '#888' }}>Loading...</div>;
     const { students, water_points } = summary;
 
+    const COLORS  = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+    const renderLabel = ({ percent }) => `${(percent*100).toFixed(0)}%`;
+
+    // Format type labels
+    const formatType = (t) => t.replace(/_/g,' ').replace(/\b\w/g, l => l.toUpperCase());
+
+    // Split institution types into school vs hcf
+    const schoolTypes = (instTypes.breakdown || []).filter(d =>
+        ['primary_school','secondary_school','madrasa'].includes(d.type)
+    );
+    const hcfTypes = (instTypes.breakdown || []).filter(d =>
+        ['community_clinic','health_family_planning'].includes(d.type)
+    );
+    const schoolTotal = schoolTypes.reduce((s,d) => s + d.count, 0);
+    const hcfTotal    = hcfTypes.reduce((s,d) => s + d.count, 0);
+
     const genderData = [
-        { name: 'Male',   value: students.boys },
+        { name: 'Male',   value: students.boys  },
         { name: 'Female', value: students.girls },
     ];
-    const wpData = [
-        { name: 'Shallow Tubewell',      value: water_points.shallow_tubewell },
-        { name: 'Piped Water',           value: water_points.piped_water },
-        { name: 'Rainwater Harvesting',  value: water_points.rainwater_harvesting },
-        { name: 'Reverse Osmosis',       value: water_points.reverse_osmosis },
-    ];
 
-    const renderCustomLabel = ({ percent }) => `${(percent * 100).toFixed(0)}%`;
+    const wpBreakdown = (wpTypes2.breakdown || []).map(d => ({
+        name: formatType(d.type), value: d.count
+    }));
+
+    const renderLegend = (data, total) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
+            {data.map((d, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i], flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ flex: 1 }}>{d.name || formatType(d.type)}</span>
+                    <span style={{ color: '#555', minWidth: 50, textAlign: 'right' }}>{(d.value || d.count).toLocaleString()}</span>
+                    <span style={{ color: '#999', minWidth: 40, textAlign: 'right' }}>
+                        {(((d.value || d.count) / total) * 100).toFixed(1)}%
+                    </span>
+                </div>
+            ))}
+        </div>
+    );
 
     return (
         <div style={{ padding: 24 }}>
             <h2 style={{ margin: '0 0 20px', fontSize: 26, fontWeight: 700 }}>Charts & Analysis</h2>
 
-            {/* ── Pie Charts Row ── */}
+            {/* ── Row 1: Institution Types + Students by Gender ── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-                <SectionCard title="Students by Gender" badge={students.total.toLocaleString()} badgeColor="#22a05a">
-                    <ResponsiveContainer width="100%" height={260}>
-                        <PieChart>
-                            <Pie data={genderData} cx="40%" cy="50%" outerRadius={100} dataKey="value" label={renderCustomLabel}>
-                                {genderData.map((_, i) => <Cell key={i} fill={['#3b82f6', '#22c55e'][i]} />)}
-                            </Pie>
-                            <Legend layout="vertical" align="right" verticalAlign="middle"
-                                formatter={(value, entry) => (
-                                    <span style={{ fontSize: 13 }}>
-                                        {value}<br />
-                                        <span style={{ color: '#555' }}>{entry.payload.value.toLocaleString()}</span>
-                                    </span>
-                                )}
-                            />
-                            <Tooltip formatter={(v) => v.toLocaleString()} />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </SectionCard>
 
-                <SectionCard title="Waterpoints by Type" badge={water_points.total.toLocaleString()} badgeColor="#d4a017">
-                    <ResponsiveContainer width="100%" height={260}>
-                        <PieChart>
-                            <Pie data={wpData} cx="40%" cy="50%" outerRadius={100} dataKey="value" label={renderCustomLabel}>
-                                {wpData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
+                {/* Institutions by Type */}
+                <SectionCard title="Institutions by Type"
+                    badge={schoolTotal.toLocaleString()} badgeColor="#3b82f6"
+                    filters={<LocationFilter onChange={f =>
+                        api.get('/charts/institution-types', {params:f}).then(r => setInstTypes(r.data))
+                    } />}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                        <PieChart width={180} height={220}>
+                            <Pie data={schoolTypes.map(d=>({name:formatType(d.type),value:d.count}))}
+                                cx={85} cy={110} innerRadius={55} outerRadius={85}
+                                dataKey="value" label={renderLabel} labelLine={false}>
+                                {schoolTypes.map((_,i) => <Cell key={i} fill={COLORS[i]} />)}
                             </Pie>
-                            <Legend layout="vertical" align="right" verticalAlign="middle"
-                                formatter={(value, entry) => (
-                                    <span style={{ fontSize: 12 }}>
-                                        {value}<br />
-                                        <span style={{ color: '#555' }}>{entry.payload.value} &nbsp; {((entry.payload.value / water_points.total) * 100).toFixed(1)}%</span>
-                                    </span>
-                                )}
-                            />
                             <Tooltip />
                         </PieChart>
-                    </ResponsiveContainer>
+                        <div style={{ flex: 1 }}>
+                            {renderLegend(schoolTypes.map(d=>({name:formatType(d.type),value:d.count})), schoolTotal)}
+                        </div>
+                    </div>
+                </SectionCard>
+
+                {/* Students by Gender */}
+                <SectionCard title="Students by Gender"
+                    badge={students.total.toLocaleString()} badgeColor="#22a05a"
+                    filters={<LocationFilter onChange={() => {}} />}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                        <PieChart width={180} height={220}>
+                            <Pie data={genderData} cx={85} cy={110}
+                                outerRadius={85} dataKey="value"
+                                label={renderLabel} labelLine={false}>
+                                {genderData.map((_,i) => <Cell key={i} fill={['#3b82f6','#22c55e'][i]} />)}
+                            </Pie>
+                            <Tooltip formatter={v => v.toLocaleString()} />
+                        </PieChart>
+                        <div style={{ flex: 1 }}>
+                            {renderLegend(genderData, students.total)}
+                        </div>
+                    </div>
                 </SectionCard>
             </div>
 
+            {/* ── Row 2: HCF Summary + Waterpoints by Type ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+
+                {/* HCF Summary */}
+                <SectionCard title="HCF Summary"
+                    badge={hcfTotal.toLocaleString()} badgeColor="#d4a017"
+                    filters={<LocationFilter onChange={f =>
+                        api.get('/charts/institution-types', {params:f}).then(r => setInstTypes(r.data))
+                    } />}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                        <PieChart width={180} height={220}>
+                            <Pie data={hcfTypes.map(d=>({name:formatType(d.type),value:d.count}))}
+                                cx={85} cy={110} innerRadius={55} outerRadius={85}
+                                dataKey="value" label={renderLabel} labelLine={false}>
+                                {hcfTypes.map((_,i) => <Cell key={i} fill={['#3b82f6','#22c55e'][i]} />)}
+                            </Pie>
+                            <Tooltip />
+                        </PieChart>
+                        <div style={{ flex: 1 }}>
+                            {renderLegend(hcfTypes.map(d=>({name:formatType(d.type),value:d.count})), hcfTotal)}
+                        </div>
+                    </div>
+                </SectionCard>
+
+                {/* Waterpoints by Type */}
+                <SectionCard title="Waterpoints by Type"
+                    badge={wpTypes2.total?.toLocaleString()} badgeColor="#d4a017"
+                    filters={<LocationFilter onChange={f =>
+                        api.get('/charts/waterpoint-types', {params:f}).then(r => setWpTypes2(r.data))
+                    } />}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                        <PieChart width={180} height={220}>
+                            <Pie data={wpBreakdown} cx={85} cy={110}
+                                outerRadius={85} dataKey="value"
+                                label={renderLabel} labelLine={false}>
+                                {wpBreakdown.map((_,i) => <Cell key={i} fill={COLORS[i]} />)}
+                            </Pie>
+                            <Tooltip />
+                        </PieChart>
+                        <div style={{ flex: 1 }}>
+                            {renderLegend(wpBreakdown, wpTypes2.total || 1)}
+                        </div>
+                    </div>
+                </SectionCard>
+            </div>
             {/* ── Quarterly Growth ── */}
-            <div style={{ marginBottom: 20 }}>
-                <SectionCard title="Water Points Growth Over Time (Quarterly)">
-                    <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={quarterly}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                            <YAxis />
-                            <Tooltip />
-                            <Bar dataKey="total" fill="#3b82f6" radius={[3,3,0,0]}>
-                                <LabelList dataKey="total" position="top" style={{ fontSize: 10 }} />
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </SectionCard>
+<div style={{ marginBottom: 20 }}>
+    <SectionCard title="Water Points Growth Over Time (Quarterly)" filters={
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+            <div style={{ flex: 1 }}>
+                <span style={labelStyle}>Institution Type</span>
+                <select style={selectStyle} onChange={e => getQuarterlyGrowth(e.target.value).then(r => setQuarterly(r.data))}>
+                    <option value="">All</option>
+                    <option value="primary_school">Primary School</option>
+                    <option value="secondary_school">Secondary School</option>
+                    <option value="community_clinic">Community Clinic</option>
+                </select>
             </div>
+            <button onClick={() => getQuarterlyGrowth().then(r => setQuarterly(r.data))}
+                style={{ padding: '7px 18px', background: '#f5f5f5', border: '1px solid #ccc', borderRadius: 4, cursor: 'pointer', fontSize: 13, height: 36 }}>
+                Reset
+            </button>
+        </div>
+    }>
+        <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={quarterly}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="total" fill="#3b82f6" radius={[3,3,0,0]}>
+                    <LabelList dataKey="total" position="top" style={{ fontSize: 10 }} />
+                </Bar>
+            </BarChart>
+        </ResponsiveContainer>
+    </SectionCard>
+</div>
 
-            {/* ── Upazila Wise ── */}
-            <div style={{ marginBottom: 20 }}>
-                <SectionCard title="Upazila Wise Water Sources" filters={
-                    <LocationFilter onChange={f => getUpazilaWise(f).then(r => setUpazilas(r.data))} />
-                }>
-                    <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={upazilas}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="upazila" tick={{ fontSize: 11 }} />
-                            <YAxis />
-                            <Tooltip />
-                            <Bar dataKey="total" fill="#3b82f6" radius={[3,3,0,0]}>
-                                <LabelList dataKey="total" position="top" style={{ fontSize: 11 }} />
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </SectionCard>
-            </div>
-
+{/* ── Upazila Wise ── */}
+<div style={{ marginBottom: 20 }}>
+    <SectionCard title="Upazila Wise Water Sources" filters={
+        <LocationFilter onChange={f => getUpazilaWise(f).then(r => setUpazilas(r.data))} />
+    }>
+        <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={upazilas}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="upazila" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="total" fill="#3b82f6" radius={[3,3,0,0]}>
+                    <LabelList dataKey="total" position="top" style={{ fontSize: 11 }} />
+                </Bar>
+            </BarChart>
+        </ResponsiveContainer>
+    </SectionCard>
+</div>
             {/* ── Chemical Testing ── */}
             <SectionCard title="Chemical Testing" legend filters={
                 <LocationFilter onChange={f => getChemicalTests(f).then(r => setChemical(r.data))} />
@@ -404,15 +498,14 @@ function ChartsPage() {
                         </BarChart>
                     </ResponsiveContainer>
                 ) : (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#aaa', fontSize: 14 }}>
-                        No chemical test data yet — seed chemical_tests table to populate this chart.
+                    <div style={{ textAlign: 'center', padding: 40, color: '#aaa' }}>
+                        Run ChemicalTestSeeder to populate this chart.
                     </div>
                 )}
             </SectionCard>
         </div>
     );
 }
-
 // ═══════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════

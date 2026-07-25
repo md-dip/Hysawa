@@ -92,4 +92,46 @@ class DashboardController extends Controller
 
         return response()->json($data);
     }
+    public function institutionTypes(Request $request)
+{
+    $districtId = $request->query('district_id');
+    $upazilaId  = $request->query('upazila_id');
+    $unionId    = $request->query('union_id');
+
+    $data = Institution::query()
+        ->when($districtId, fn($q) => $q->where('district_id', $districtId))
+        ->when($upazilaId,  fn($q) => $q->where('upazila_id',  $upazilaId))
+        ->when($unionId,    fn($q) => $q->where('union_id',    $unionId))
+        ->selectRaw('type, COUNT(*) as count')
+        ->groupBy('type')
+        ->orderByDesc('count')
+        ->get();
+
+    return response()->json([
+        'total'     => $data->sum('count'),
+        'breakdown' => $data,
+    ]);
+}
+
+    public function waterpointTypes(Request $request)
+    {
+        $districtId = $request->query('district_id');
+        $upazilaId  = $request->query('upazila_id');
+        $unionId    = $request->query('union_id');
+
+        $data = WaterPoint::query()
+            ->join('institutions','water_points.institution_id','=','institutions.id')
+            ->when($districtId, fn($q) => $q->where('institutions.district_id', $districtId))
+            ->when($upazilaId,  fn($q) => $q->where('institutions.upazila_id',  $upazilaId))
+            ->when($unionId,    fn($q) => $q->where('institutions.union_id',    $unionId))
+            ->selectRaw('water_points.type, COUNT(*) as count')
+            ->groupBy('water_points.type')
+            ->orderByDesc('count')
+            ->get();
+
+        return response()->json([
+            'total'     => $data->sum('count'),
+            'breakdown' => $data,
+        ]);
+    }
 }

@@ -22,5 +22,6 @@ Route::prefix('v1')->group(function () {
     Route::get('/locations/districts',        [LocationController::class,    'districts']);
     Route::get('/locations/upazilas',         [LocationController::class,    'upazilas']);
     Route::get('/locations/unions',           [LocationController::class,    'unions']);
-
+    Route::get('/charts/institution-types', [DashboardController::class, 'institutionTypes']);
+    Route::get('/charts/waterpoint-types',  [DashboardController::class, 'waterpointTypes']);
 });
